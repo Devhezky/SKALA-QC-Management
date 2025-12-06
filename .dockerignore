@@ -5,9 +5,10 @@ npm-debug.log
 README.md
 .next
 .git
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-test
+.env*
+.DS_Store
 *.log
 local-*
+test-ai.pdf
+test.pdf
+project-report.pdf
