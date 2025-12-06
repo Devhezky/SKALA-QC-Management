@@ -1,0 +1,349 @@
+// QC System Database Schema for Narapati Studio
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      UserRole @default(QC)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Perfex Integration
+  perfexId  Int?     @unique
+  password  String?  // Hashed password (optional, if we want to store local copy)
+  active    Boolean  @default(true)
+
+  // Relations
+  inspections     QCInspection[]
+  signatures      Signature[]
+  createdProjects Project[]
+  attachments     Attachment[]
+  memberOfProjects Project[] @relation("ProjectMembers")
+  notifications    Notification[]
+}
+
+enum UserRole {
+  QC
+  PM
+  WORKSHOP_HEAD
+  ADMIN
+  OWNER
+}
+
+// Project Management
+model Project {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  clientName  String
+  location    String
+  projectType String
+  status      ProjectStatus @default(ACTIVE)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  createdBy   User           @relation(fields: [createdById], references: [id])
+  inspections QCInspection[]
+  analyses    ProjectAnalysis[]
+  
+  // New Fields
+  billingType             String?
+  totalValue              Float?
+  estimatedHours          Float?
+  startDate               DateTime?
+  endDate                 DateTime?
+  tags                    String?
+  description             String?
+  calculateProgressByTasks Boolean @default(false)
+  sendProjectEmail        Boolean @default(false)
+  
+  // Perfex Integration
+  perfexId                Int?     @unique
+  clientId                Int?     // Perfex Client ID
+  
+  // Relations
+  clientDbId              String?
+  client                  Client?  @relation(fields: [clientDbId], references: [id])
+
+  members                 User[]   @relation("ProjectMembers")
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+}
+
+// Phase Management
+model Phase {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  templateItems ChecklistItemTemplate[]
+  inspections   QCInspection[]
+}
+
+// Checklist Template
+model ChecklistTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  projectType String
+  version     String   @default("1.0")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  items       ChecklistItemTemplate[]
+  inspections QCInspection[]
+}
+
+model ChecklistItemTemplate {
+  id                  String              @id @default(cuid())
+  templateId          String
+  phaseId             String
+  code                String
+  title               String
+  acceptanceCriteria  String
+  checkMethod         String
+  isMandatory         Boolean             @default(false)
+  weight              Int                 @default(1)
+  requirePhoto        Boolean             @default(false)
+  requireValue        Boolean             @default(false)
+  attachmentType      AttachmentType      @default(NONE)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  // Relations
+  template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  phase    Phase            @relation(fields: [phaseId], references: [id])
+  items    QCInspectionItem[]
+}
+
+enum AttachmentType {
+  PHOTO
+  DOCUMENT
+  NONE
+}
+
+// QC Inspection
+model QCInspection {
+  id           String            @id @default(cuid())
+  projectId    String
+  phaseId      String
+  templateId   String
+  inspectorId  String
+  status       InspectionStatus  @default(DRAFT)
+  score        Float?
+  comments     String?
+  submittedAt  DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  // Relations
+  project   Project              @relation(fields: [projectId], references: [id])
+  phase     Phase                @relation(fields: [phaseId], references: [id])
+  template  ChecklistTemplate    @relation(fields: [templateId], references: [id])
+  inspector User                 @relation(fields: [inspectorId], references: [id])
+  items     QCInspectionItem[]
+  signatures Signature[]
+  attachments Attachment[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([projectId, status])
+}
+
+enum InspectionStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  NEEDS_REWORK
+}
+
+model QCInspectionItem {
+  id                    String              @id @default(cuid())
+  inspectionId         String
+  templateItemId       String
+  status               ItemStatus          @default(PENDING)
+  measuredValue        String?
+  notes                String?
+  isMandatory          Boolean
+  weight               Int
+  score                Float?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  // Relations
+  inspection QCInspection           @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  template   ChecklistItemTemplate  @relation(fields: [templateItemId], references: [id])
+  attachments Attachment[]
+
+  @@index([inspectionId])
+  @@index([status])
+}
+
+enum ItemStatus {
+  PENDING
+  OK
+  NOT_OK
+  NA
+}
+
+// Attachments
+model Attachment {
+  id           String        @id @default(cuid())
+  inspectionId String?
+  itemId       String?
+  filename     String
+  filePath     String
+  fileType     FileType
+  uploadedById String
+  createdAt    DateTime      @default(now())
+
+  // Relations
+  inspection QCInspection?   @relation(fields: [inspectionId], references: [id])
+  item       QCInspectionItem? @relation(fields: [itemId], references: [id])
+  uploadedBy User            @relation(fields: [uploadedById], references: [id])
+}
+
+enum FileType {
+  PHOTO
+  VIDEO
+  DOCUMENT
+}
+
+// Digital Signatures
+model Signature {
+  id           String           @id @default(cuid())
+  inspectionId String
+  signerId     String
+  signerRole   UserRole
+  status       SignatureStatus  @default(PENDING)
+  signatureData String?         // Base64 encoded signature
+  comments     String?
+  ipAddress    String?
+  deviceInfo   String?
+  signedAt     DateTime?
+  createdAt    DateTime         @default(now())
+
+  // Relations
+  inspection QCInspection @relation(fields: [inspectionId], references: [id])
+  signer     User         @relation(fields: [signerId], references: [id])
+}
+
+enum SignatureStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// AI Analysis History
+model ProjectAnalysis {
+  id          String   @id @default(cuid())
+  projectId   String
+  content     String   // The analysis text
+  provider    String   // openai, glm, gemini
+  model       String   // gpt-4, etc.
+  score       Float?   // Project score at time of analysis
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// Client Management
+model Client {
+  id          String   @id @default(cuid())
+  perfexId    Int      @unique
+  company     String
+  vat         String?
+  phonenumber String?
+  country     String?
+  city        String?
+  zip         String?
+  state       String?
+  address     String?
+  website     String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  contacts    Contact[]
+  projects    Project[]
+}
+
+model Contact {
+  id             String   @id @default(cuid())
+  perfexId       Int      @unique
+  clientId       String
+  email          String
+  firstname      String
+  lastname       String
+  phonenumber    String?
+  title          String?
+  lastLogin      DateTime?
+  active         Boolean  @default(true)
+  isPrimary      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+// Notifications
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  SUCCESS
+  ERROR
+}
+
+// System Settings (for SaaS configuration)
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String?
+  encrypted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
