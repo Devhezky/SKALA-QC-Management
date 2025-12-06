@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
         // Validate token with Skala Backend
         // We use the internal URL if possible, or the public URL
         // Assuming PERFEX_API_URL is set in .env
-        const perfexUrl = process.env.PERFEX_API_URL || 'https://skala.narapatistudio.com';
+        const perfexUrl = process.env.PERFEX_API_URL || 'http://localhost:8888/skala-new/index.php';
 
         // Construct the validation URL. 
         // Using direct HMVC controller path: module/controller/method
