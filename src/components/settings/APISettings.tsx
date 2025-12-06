@@ -127,7 +127,7 @@ export function APISettings() {
                             <Input
                                 type="url"
                                 id="perfex-url"
-                                placeholder="http://localhost:8888/skala-new/index.php"
+                                placeholder="https://skala.narapatistudio.com"
                                 value={settings.PERFEX_API_URL}
                                 onChange={(e) => setSettings({ ...settings, PERFEX_API_URL: e.target.value })}
                             />
@@ -142,7 +142,7 @@ export function APISettings() {
                             )}
                         </div>
                         <p className="text-xs text-gray-500">
-                            URL lengkap ke instalasi Skala/Perfex. Contoh: http://localhost:8888/skala-new/index.php
+                            URL lengkap ke instalasi Skala/Perfex. Contoh: https://skala.narapatistudio.com
                         </p>
                     </div>
 
