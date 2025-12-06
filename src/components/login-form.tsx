@@ -131,7 +131,7 @@ export function LoginForm({
                 const left = window.screen.width / 2 - width / 2;
                 const top = window.screen.height / 2 - height / 2;
 
-                const skalaUrl = 'http://localhost:8888/skala-new/index.php';
+                const skalaUrl = 'https://skala.narapatistudio.com/index.php';
                 const ssoUrl = `${skalaUrl}/admin/qc_integration/qc_sso/login?popup=1`;
 
                 window.open(
