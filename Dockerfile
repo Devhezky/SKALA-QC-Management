@@ -18,10 +18,6 @@ COPY . .
 # Generate Prisma Client
 RUN npx prisma generate
 
-# Create database with schema during build time (for template)
-ENV DATABASE_URL="file:./db/custom.db"
-RUN mkdir -p db && npx prisma db push --skip-generate
-
 # Declare build arguments
 ARG NEXT_PUBLIC_APP_URL
 ARG NEXT_PUBLIC_PERFEX_URL
