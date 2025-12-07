@@ -49,20 +49,31 @@ export async function POST(request: NextRequest) {
             }, { status: 400 });
         }
 
-        // Direct API call instead of using perfexClient (which may have stale config)
-        const projectsResponse = await axios.get(`${perfexUrl}/api/projects`, {
-            headers: {
-                'authtoken': perfexKey,
-                'Authorization': perfexKey
-            },
+        // Use qc_integration custom endpoint (same as Test Koneksi)
+        // This endpoint is what actually returns projects from Perfex
+        const baseUrl = perfexUrl.replace('/index.php', '');
+        const apiEndpoint = `${baseUrl}/index.php/qc_integration/qc_api/get_projects`;
+
+        console.log('Fetching projects from:', apiEndpoint);
+
+        const projectsResponse = await axios.get(apiEndpoint, {
             timeout: 15000
         });
 
         const response = projectsResponse.data;
-        console.log('Raw projects response type:', typeof response, 'isArray:', Array.isArray(response));
+        console.log('Raw projects response:', typeof response, 'status:', response?.status);
 
-        // Handle response - could be array or object with data property
-        const perfexProjects = Array.isArray(response) ? response : (response.data || []);
+        // qc_integration returns { status: true, data: [...] }
+        if (!response || !response.status || !response.data) {
+            return NextResponse.json({
+                success: true,
+                message: 'No projects found in Perfex',
+                imported: 0,
+                skipped: 0
+            });
+        }
+
+        const perfexProjects = response.data;
 
         if (!perfexProjects || perfexProjects.length === 0) {
             return NextResponse.json({
