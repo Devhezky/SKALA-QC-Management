@@ -8,7 +8,8 @@ export async function GET(request: NextRequest) {
     const code = searchParams.get('code');
 
     if (!code) {
-        return NextResponse.redirect(new URL('/login?error=missing_code', request.url));
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://qc.narapatistudio.com';
+        return NextResponse.redirect(new URL('/login?error=missing_code', baseUrl));
     }
 
     try {
@@ -180,7 +181,8 @@ export async function GET(request: NextRequest) {
             return redirectResponse;
         } else {
             console.error('[SSO Callback] Token validation failed:', data);
-            return NextResponse.redirect(new URL('/login?error=invalid_token', request.url));
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://qc.narapatistudio.com';
+            return NextResponse.redirect(new URL('/login?error=invalid_token', baseUrl));
         }
     } catch (error) {
         console.error('[SSO Callback] Error validating token:', error);
@@ -204,9 +206,11 @@ export async function GET(request: NextRequest) {
                 response: error.response?.data
             });
             const errorDetails = encodeURIComponent(JSON.stringify(error.response?.data || error.message));
-            return NextResponse.redirect(new URL(`/login?error=validation_error&details=${errorDetails}`, request.url));
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://qc.narapatistudio.com';
+            return NextResponse.redirect(new URL(`/login?error=validation_error&details=${errorDetails}`, baseUrl));
         }
         const errorMessage = encodeURIComponent(error instanceof Error ? error.message : String(error));
-        return NextResponse.redirect(new URL(`/login?error=validation_error&details=${errorMessage}`, request.url));
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://qc.narapatistudio.com';
+        return NextResponse.redirect(new URL(`/login?error=validation_error&details=${errorMessage}`, baseUrl));
     }
 }
