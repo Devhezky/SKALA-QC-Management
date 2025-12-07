@@ -133,7 +133,8 @@ export function LoginForm({
                 const top = window.screen.height / 2 - height / 2;
 
                 const skalaUrl = process.env.NEXT_PUBLIC_PERFEX_URL || 'https://skala.narapatistudio.com';
-                const ssoUrl = `${skalaUrl}/admin/qc_integration/qc_sso/login?popup=1`;
+                const returnUrl = encodeURIComponent(`${window.location.origin}/api/auth/callback/skala`);
+                const ssoUrl = `${skalaUrl}/admin/qc_integration/qc_sso/login?popup=1&return_url=${returnUrl}`;
 
                 window.open(
                   ssoUrl,
