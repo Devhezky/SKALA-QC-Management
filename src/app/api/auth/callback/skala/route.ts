@@ -62,9 +62,15 @@ export async function GET(request: NextRequest) {
                 }
             } else {
                 // Check by perfexId just in case email changed (unlikely but possible)
-                const existingUserByPerfexId = await db.user.findUnique({
-                    where: { perfexId: parseInt(perfexUser.staffid) }
-                });
+                // But only if staffid is valid
+                const parsedStaffId = perfexUser.staffid ? parseInt(perfexUser.staffid) : NaN;
+
+                let existingUserByPerfexId = null;
+                if (!isNaN(parsedStaffId)) {
+                    existingUserByPerfexId = await db.user.findUnique({
+                        where: { perfexId: parsedStaffId }
+                    });
+                }
 
                 if (existingUserByPerfexId) {
                     user = await db.user.update({
@@ -80,8 +86,8 @@ export async function GET(request: NextRequest) {
                     user = await db.user.create({
                         data: {
                             email: perfexUser.email,
-                            name: `${perfexUser.firstname} ${perfexUser.lastname}`,
-                            perfexId: parseInt(perfexUser.staffid),
+                            name: `${perfexUser.firstname || ''} ${perfexUser.lastname || ''}`.trim() || 'SKALA User',
+                            perfexId: !isNaN(parsedStaffId) ? parsedStaffId : undefined,
                             active: perfexUser.active === '1',
                             role: perfexUser.admin === '1' ? 'ADMIN' : 'QC',
                         }
