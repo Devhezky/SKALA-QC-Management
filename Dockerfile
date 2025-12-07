@@ -61,18 +61,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Copy prisma schema for runtime needs
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-# Copy db folder for SQLite initialization (as fallback/template)
-COPY --from=builder --chown=nextjs:nodejs /app/db ./db-template
+# Copy db folder with existing database
+COPY --from=builder --chown=nextjs:nodejs /app/db ./db
 # Copy Prisma engine binaries (CRITICAL for standalone mode!)
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
-# Copy prisma CLI for runtime db initialization
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/engines ./node_modules/@prisma/engines
-
-# Copy entrypoint script
-COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh
 
 USER nextjs
 
@@ -81,6 +74,5 @@ EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
-# Use entrypoint script to initialize db if needed
-CMD ["./docker-entrypoint.sh"]
-
+# Direct node command - no entrypoint script
+CMD ["node", "server.js"]
