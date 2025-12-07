@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import axios from 'axios';
 import { cache, CACHE_KEYS } from '@/lib/cache';
+import { perfexClient } from '@/lib/perfex-client';
 
 export async function POST(request: NextRequest) {
     try {
@@ -9,11 +10,10 @@ export async function POST(request: NextRequest) {
         console.log('PERFEX_API_URL:', process.env.PERFEX_API_URL);
         // console.log('PERFEX_API_KEY:', process.env.PERFEX_API_KEY ? 'SET (hidden)' : 'NOT SET'); // This line is removed as API key is not directly used with axios for this endpoint
 
-        // Use the qc_integration endpoint that includes client names
-        const baseURL = process.env.PERFEX_API_URL?.replace('/index.php', '');
-        const response = await axios.get(`${baseURL}/index.php/qc_integration/qc_api/get_projects`);
+        // Use standard API endpoints instead of broken qc_integration
+        const response = await perfexClient.getProjects();
 
-        if (!response.data || !response.data.status || !response.data.data) {
+        if (!response || response.length === 0) {
             return NextResponse.json({
                 success: true,
                 message: 'No projects found in Perfex',
@@ -22,31 +22,25 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        const perfexProjects = response.data.data;
-        console.log('Fetched projects count:', perfexProjects?.length || 0);
-        // console.log('Projects:', JSON.stringify(perfexProjects, null, 2)); // This line is removed to avoid logging potentially large data
+        const perfexProjects = response;
+        console.log('Fetched projects count:', perfexProjects.length);
 
-        if (!perfexProjects || perfexProjects.length === 0) {
-            return NextResponse.json({
-                success: true,
-                message: 'No projects found in Perfex',
-                imported: 0,
-                skipped: 0
-            });
+        // Fetch clients to map names since standard API might only give IDs
+        const perfexClients = await perfexClient.getClients();
+        const clientLookup = new Map<number, string>();
+
+        // Handle various response structures for clients
+        const clientsArray = Array.isArray(perfexClients) ? perfexClients :
+            (perfexClients as any).data ? (perfexClients as any).data : [];
+
+        for (const client of clientsArray) {
+            const clientId = client.userid || client.id;
+            const clientName = client.company || client.name;
+            if (clientId && clientName) {
+                clientLookup.set(Number(clientId), clientName);
+            }
         }
-
-        // Fetch clients from Skala to build lookup map (This section is removed as client_name is directly available)
-        // const perfexClients = await perfexClient.getClients();
-        // const clientLookup = new Map<number, string>();
-        // for (const client of perfexClients) {
-        //     // The client ID could be in 'userid' or 'id' field depending on API version
-        //     const clientId = client.userid || client.id;
-        //     if (clientId) {
-        //         clientLookup.set(Number(clientId), client.company || client.name || 'Unknown');
-        //     }
-        // }
-        // console.log('Fetched clients count:', perfexClients?.length || 0);
-        // console.log('Client lookup sample:', Array.from(clientLookup.entries()).slice(0, 5));
+        console.log('Fetched clients count:', clientsArray.length);
 
         let importedCount = 0;
         let skippedCount = 0;
@@ -60,8 +54,8 @@ export async function POST(request: NextRequest) {
                     where: { perfexId: Number(perfexProject.id) }
                 });
 
-                // Use client_name from the API (already joined in SQL)
-                const clientName = perfexProject.client_name || perfexProject.company || 'Unknown Client';
+                // Use client_name from lookup or fallback
+                const clientName = clientLookup.get(Number(perfexProject.clientid)) || perfexProject.company || 'Unknown Client';
                 let clientDbId: string | null = null;
 
                 if (perfexProject.clientid) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import axios from 'axios';
+import { db } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
@@ -37,13 +38,70 @@ export async function GET(request: NextRequest) {
         const data = response.data;
 
         if (data.status && data.user) {
-            // Create session
-            const userData = data.user; // Renamed from 'user' to 'userData' for clarity with the new 'response' variable
+            const perfexUser = data.user;
+            console.log('[SSO Callback] Perfex User validated:', perfexUser.email);
 
-            console.log('[SSO Callback] User validated:', userData.email);
+            // === SYNC USER WITH LOCAL DB ===
+            let user = await db.user.findUnique({
+                where: { email: perfexUser.email }
+            });
+
+            if (user) {
+                // Update existing user
+                if (user.perfexId !== parseInt(perfexUser.staffid)) {
+                    user = await db.user.update({
+                        where: { id: user.id },
+                        data: {
+                            perfexId: parseInt(perfexUser.staffid),
+                            // Update other fields if needed
+                            name: `${perfexUser.firstname} ${perfexUser.lastname}`,
+                            role: perfexUser.admin === '1' ? 'ADMIN' : 'QC',
+                        }
+                    });
+                }
+            } else {
+                // Check by perfexId just in case email changed (unlikely but possible)
+                const existingUserByPerfexId = await db.user.findUnique({
+                    where: { perfexId: parseInt(perfexUser.staffid) }
+                });
+
+                if (existingUserByPerfexId) {
+                    user = await db.user.update({
+                        where: { id: existingUserByPerfexId.id },
+                        data: {
+                            email: perfexUser.email,
+                            name: `${perfexUser.firstname} ${perfexUser.lastname}`,
+                            role: perfexUser.admin === '1' ? 'ADMIN' : 'QC',
+                        }
+                    });
+                } else {
+                    // Create NEW user
+                    user = await db.user.create({
+                        data: {
+                            email: perfexUser.email,
+                            name: `${perfexUser.firstname} ${perfexUser.lastname}`,
+                            perfexId: parseInt(perfexUser.staffid),
+                            active: perfexUser.active === '1',
+                            role: perfexUser.admin === '1' ? 'ADMIN' : 'QC',
+                        }
+                    });
+                }
+            }
+
+            // Create standardized session object (Same as login route)
+            const sessionData = {
+                id: user.id,
+                perfexId: user.perfexId,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                timestamp: Date.now()
+            };
+
+            const sessionString = JSON.stringify(sessionData);
 
             // Create the response
-            const response = NextResponse.redirect(new URL('/', request.url));
+            const redirectResponse = NextResponse.redirect(new URL('/', request.url));
 
             // Check if this is a popup flow
             const isPopup = searchParams.get('popup') === '1';
@@ -96,7 +154,7 @@ export async function GET(request: NextRequest) {
                 });
 
                 // Set the cookie on the popup response as well
-                popupResponse.cookies.set('auth_session', JSON.stringify(userData), {
+                popupResponse.cookies.set('auth_session', sessionString, {
                     httpOnly: true,
                     secure: process.env.NODE_ENV === 'production',
                     sameSite: 'lax',
@@ -107,8 +165,8 @@ export async function GET(request: NextRequest) {
                 return popupResponse;
             }
 
-            // Set cookie
-            response.cookies.set('auth_session', JSON.stringify(userData), {
+            // Fallback for non-popup flow (direct redirect)
+            redirectResponse.cookies.set('auth_session', sessionString, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: 'lax',
@@ -118,7 +176,7 @@ export async function GET(request: NextRequest) {
 
             console.log('[SSO Callback] Cookie set, redirecting to dashboard');
 
-            return response;
+            return redirectResponse;
         } else {
             console.error('[SSO Callback] Token validation failed:', data);
             return NextResponse.redirect(new URL('/login?error=invalid_token', request.url));

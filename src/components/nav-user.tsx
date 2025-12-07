@@ -29,17 +29,37 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export function NavUser({
   user,
+  isLoading
 }: {
   user: {
     name: string
     email: string
     avatar: string
   }
+  isLoading?: boolean
 }) {
   const { isMobile } = useSidebar()
+
+  if (isLoading) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <div className="flex items-center gap-2 p-2">
+            <Skeleton className="h-8 w-8 rounded-lg" />
+            <div className="grid flex-1 text-left text-sm leading-tight gap-1">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-2 w-16" />
+            </div>
+            <Skeleton className="h-4 w-4" />
+          </div>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
+  }
 
   return (
     <SidebarMenu>

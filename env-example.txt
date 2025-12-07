@@ -1,0 +1,2 @@
+PERFEX_API_URL="https://skala.narapatistudio.com"
+PERFEX_API_KEY="paste_your_full_api_key_from_coolify_here"

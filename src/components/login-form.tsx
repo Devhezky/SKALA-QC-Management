@@ -131,7 +131,7 @@ export function LoginForm({
                 const left = window.screen.width / 2 - width / 2;
                 const top = window.screen.height / 2 - height / 2;
 
-                const skalaUrl = 'http://localhost:8888/skala-new/index.php';
+                const skalaUrl = process.env.NEXT_PUBLIC_PERFEX_URL || 'https://skala.narapatistudio.com';
                 const ssoUrl = `${skalaUrl}/admin/qc_integration/qc_sso/login?popup=1`;
 
                 window.open(
@@ -141,16 +141,24 @@ export function LoginForm({
                 );
 
                 const handleMessage = (event: MessageEvent) => {
-                  if (event.origin !== window.location.origin) return;
+                  console.log('[Login] Received message:', event.data, 'from', event.origin);
+                  console.log('[Login] Expected origin:', window.location.origin);
+
+                  if (event.origin !== window.location.origin) {
+                    console.warn('[Login] Origin mismatch!');
+                    return;
+                  }
 
                   if (event.data?.type === 'SKALA_LOGIN_SUCCESS') {
+                    console.log('[Login] Success message received. Redirecting...');
                     window.removeEventListener('message', handleMessage);
                     toast({
                       title: "Login successful",
                       description: "Welcome back!",
                     })
-                    router.push("/dashboard");
-                    router.refresh();
+
+                    // Force a hard redirect if router.push fails effectively
+                    window.location.href = '/dashboard';
                   }
                 };
 

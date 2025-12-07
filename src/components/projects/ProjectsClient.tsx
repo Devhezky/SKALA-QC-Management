@@ -55,6 +55,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useToast } from "@/hooks/use-toast"
 
 interface Project {
     id: string
@@ -145,20 +146,46 @@ export default function ProjectsClient({ initialProjects }: ProjectsClientProps)
         }
     }
 
+    const { toast } = useToast()
+
     const handleSync = async () => {
+        console.log('Sync button clicked')
         setIsSyncing(true)
         try {
+            toast({
+                title: "Syncing...",
+                description: "Menghubungkan ke server SKALA...",
+            })
+
+            console.log('Calling /api/perfex/import-projects')
             const response = await fetch('/api/perfex/import-projects', { method: 'POST' })
+            console.log('Sync response status:', response.status)
+
             const data = await response.json()
+            console.log('Sync response data:', data)
 
             if (data.success) {
-                alert(`Sync berhasil! ${data.message}`)
+                toast({
+                    title: "Sync Berhasil",
+                    description: data.message || "Data project berhasil diperbarui",
+                    variant: "default",
+                })
                 refreshData() // Refresh the project list after sync
             } else {
-                alert('Sync gagal: ' + (data.error || data.details))
+                console.error('Sync failed:', data)
+                toast({
+                    title: "Sync Gagal",
+                    description: data.error || data.details || "Terjadi kesalahan saat sync",
+                    variant: "destructive",
+                })
             }
         } catch (error) {
-            alert('Sync gagal')
+            console.error('Sync error:', error)
+            toast({
+                title: "Sync Error",
+                description: "Gagal menghubungkan ke server",
+                variant: "destructive",
+            })
         } finally {
             setIsSyncing(false)
         }

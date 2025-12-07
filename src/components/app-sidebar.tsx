@@ -125,11 +125,11 @@ import { useUser } from "@/contexts/UserContext"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { pinnedProjects } = usePinnedProjects()
-  const { user } = useUser()
+  const { user, isLoading } = useUser()
   const pathname = usePathname()
 
   const userData = user ? {
-    name: `${user.firstname} ${user.lastname}`,
+    name: (user as any).name || `${user.firstname || ''} ${user.lastname || ''}`.trim() || 'User',
     email: user.email,
     avatar: "/avatars/shadcn.jpg", // Fallback avatar
   } : data.user
@@ -165,7 +165,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <div className="px-2 pb-2">
           <InstallPrompt />
         </div>
-        <NavUser user={userData} />
+        <NavUser user={userData} isLoading={isLoading} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

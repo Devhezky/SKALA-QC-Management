@@ -24,6 +24,12 @@ export function middleware(request: NextRequest) {
     // Check for auth session cookie
     const hasSession = request.cookies.has('auth_session');
 
+    console.log('[Middleware] Path:', request.nextUrl.pathname);
+    console.log('[Middleware] Has Session:', hasSession);
+    if (hasSession) {
+        console.log('[Middleware] Session Cookie:', request.cookies.get('auth_session')?.value.substring(0, 20) + '...');
+    }
+
     // If trying to access protected route without session
     if (!isPublicPath && !hasSession) {
         // Redirect to login page
