@@ -2,18 +2,69 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import axios from 'axios';
 import { cache, CACHE_KEYS } from '@/lib/cache';
-import { perfexClient } from '@/lib/perfex-client';
+
+// Helper to get Perfex credentials (database first, then env vars)
+async function getPerfexCredentials(): Promise<{ url: string | null; key: string | null }> {
+    let url: string | null = null;
+    let key: string | null = null;
+
+    try {
+        const settings = await db.systemSetting.findMany({
+            where: {
+                key: { in: ['PERFEX_API_URL', 'PERFEX_API_KEY'] }
+            }
+        });
+
+        for (const s of settings) {
+            if (s.key === 'PERFEX_API_URL' && s.value) url = s.value;
+            if (s.key === 'PERFEX_API_KEY' && s.value) key = s.value;
+        }
+    } catch (error) {
+        console.log('[Sync] Could not read from database, using env vars');
+    }
+
+    // Fallback to environment variables
+    if (!url) url = process.env.PERFEX_API_URL || null;
+    if (!key) key = process.env.PERFEX_API_KEY || null;
+
+    return { url, key };
+}
 
 export async function POST(request: NextRequest) {
     try {
         console.log('=== SYNC PROJECTS START ===');
-        console.log('PERFEX_API_URL:', process.env.PERFEX_API_URL);
-        // console.log('PERFEX_API_KEY:', process.env.PERFEX_API_KEY ? 'SET (hidden)' : 'NOT SET'); // This line is removed as API key is not directly used with axios for this endpoint
 
-        // Use standard API endpoints instead of broken qc_integration
-        const response = await perfexClient.getProjects();
+        // Get credentials from database or env vars
+        const { url: perfexUrl, key: perfexKey } = await getPerfexCredentials();
 
-        if (!response || response.length === 0) {
+        console.log('PERFEX_API_URL:', perfexUrl);
+        console.log('PERFEX_API_KEY:', perfexKey ? 'SET (hidden)' : 'NOT SET');
+
+        if (!perfexUrl || !perfexKey) {
+            return NextResponse.json({
+                success: false,
+                error: 'Missing Perfex API credentials. Please configure in Settings > API.',
+                imported: 0,
+                skipped: 0
+            }, { status: 400 });
+        }
+
+        // Direct API call instead of using perfexClient (which may have stale config)
+        const projectsResponse = await axios.get(`${perfexUrl}/api/projects`, {
+            headers: {
+                'authtoken': perfexKey,
+                'Authorization': perfexKey
+            },
+            timeout: 15000
+        });
+
+        const response = projectsResponse.data;
+        console.log('Raw projects response type:', typeof response, 'isArray:', Array.isArray(response));
+
+        // Handle response - could be array or object with data property
+        const perfexProjects = Array.isArray(response) ? response : (response.data || []);
+
+        if (!perfexProjects || perfexProjects.length === 0) {
             return NextResponse.json({
                 success: true,
                 message: 'No projects found in Perfex',
@@ -22,31 +73,38 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        const perfexProjects = response;
         console.log('Fetched projects count:', perfexProjects.length);
 
-        // Fetch clients to map names since standard API might only give IDs
-        const perfexClients = await perfexClient.getClients();
-        const clientLookup = new Map<number, string>();
+        // Fetch clients for name lookup
+        let clientLookup = new Map<number, string>();
+        try {
+            const clientsResponse = await axios.get(`${perfexUrl}/api/customers`, {
+                headers: {
+                    'authtoken': perfexKey,
+                    'Authorization': perfexKey
+                },
+                timeout: 15000
+            });
+            const clientsData = clientsResponse.data;
+            const clientsArray = Array.isArray(clientsData) ? clientsData : (clientsData.data || []);
 
-        // Handle various response structures for clients
-        const clientsArray = Array.isArray(perfexClients) ? perfexClients :
-            (perfexClients as any).data ? (perfexClients as any).data : [];
-
-        for (const client of clientsArray) {
-            const clientId = client.userid || client.id;
-            const clientName = client.company || client.name;
-            if (clientId && clientName) {
-                clientLookup.set(Number(clientId), clientName);
+            for (const client of clientsArray) {
+                const clientId = client.userid || client.id;
+                const clientName = client.company || client.name;
+                if (clientId && clientName) {
+                    clientLookup.set(Number(clientId), clientName);
+                }
             }
+            console.log('Fetched clients count:', clientsArray.length);
+        } catch (clientError) {
+            console.warn('Could not fetch clients:', clientError);
         }
-        console.log('Fetched clients count:', clientsArray.length);
 
         let importedCount = 0;
         let skippedCount = 0;
         const errors: string[] = [];
 
-        // 2. For each project, check if it exists and create if not
+        // For each project, check if it exists and create if not
         for (const perfexProject of perfexProjects) {
             try {
                 // Check if project already exists by perfexId
