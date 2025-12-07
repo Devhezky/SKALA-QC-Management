@@ -22,6 +22,49 @@ export async function POST(request: NextRequest) {
             where: { email }
         });
 
+        // DEMO USER BYPASS
+        if (email === 'demo@narapatistudio.com' && password === 'demo123') {
+            const demoUser = await db.user.upsert({
+                where: { email: 'demo@narapatistudio.com' },
+                update: {},
+                create: {
+                    email: 'demo@narapatistudio.com',
+                    name: 'Demo Admin',
+                    role: 'ADMIN',
+                    active: true,
+                    perfexId: 999999
+                }
+            });
+
+            const sessionData = JSON.stringify({
+                id: demoUser.id,
+                perfexId: demoUser.perfexId,
+                email: demoUser.email,
+                name: demoUser.name,
+                role: demoUser.role,
+                timestamp: Date.now()
+            });
+
+            const cookieStore = await cookies();
+            cookieStore.set('auth_session', sessionData, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 60 * 60 * 8, // 8 hours
+                path: '/',
+            });
+
+            return NextResponse.json({
+                success: true,
+                user: {
+                    id: demoUser.id,
+                    email: demoUser.email,
+                    name: demoUser.name,
+                    role: demoUser.role,
+                }
+            });
+        }
+
         // 2. If not found locally, try to find in Perfex and sync
         if (!user) {
             const perfexUser = await perfexClient.validateStaff(email);
