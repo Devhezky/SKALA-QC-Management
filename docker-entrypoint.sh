@@ -2,18 +2,23 @@
 set -e
 
 DB_PATH="/app/db/custom.db"
+TEMPLATE_PATH="/app/db-template/custom.db"
 
-# Check if database file exists
+# Check if database file exists in volume
 if [ ! -f "$DB_PATH" ]; then
-    echo "Database not found at $DB_PATH. Initializing..."
+    echo "Database not found at $DB_PATH."
     
     # Create db directory if not exists
     mkdir -p /app/db
     
-    # Run prisma db push to create schema
-    npx prisma db push --skip-generate
-    
-    echo "Database initialized successfully!"
+    # Copy template database (created during build)
+    if [ -f "$TEMPLATE_PATH" ]; then
+        echo "Copying database template..."
+        cp "$TEMPLATE_PATH" "$DB_PATH"
+        echo "Database initialized from template!"
+    else
+        echo "WARNING: No database template found. Database may not work."
+    fi
 else
     echo "Database found at $DB_PATH"
 fi
