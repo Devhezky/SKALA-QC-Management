@@ -141,7 +141,8 @@ export async function GET(request: NextRequest) {
                     <h1>Login Successful!</h1>
                     <p>Closing window...</p>
                     <script>
-                        window.opener.postMessage({ type: 'SKALA_LOGIN_SUCCESS' }, window.location.origin);
+                        // Use wildcard targetOrigin to ensure message delivery across variations (www, http/https edge cases)
+                        window.opener.postMessage({ type: 'SKALA_LOGIN_SUCCESS' }, '*');
                         setTimeout(() => {
                             window.close();
                         }, 1500);

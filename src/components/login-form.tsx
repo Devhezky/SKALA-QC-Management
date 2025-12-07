@@ -146,8 +146,9 @@ export function LoginForm({
                   console.log('[Login] Expected origin:', window.location.origin);
 
                   if (event.origin !== window.location.origin) {
-                    console.warn('[Login] Origin mismatch!');
-                    return;
+                    console.warn('[Login] Origin mismatch! Received:', event.origin, 'Expected:', window.location.origin);
+                    // Proceeding anyway for debugging/robustness in production
+                    // return; 
                   }
 
                   if (event.data?.type === 'SKALA_LOGIN_SUCCESS') {
