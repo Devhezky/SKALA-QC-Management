@@ -155,13 +155,21 @@ export async function POST(request: NextRequest) {
                     });
                 } else {
                     // Create new project
-                    // Find first available user for imports
-                    const adminUser = await db.user.findFirst({
+                    // Find first available user for imports, or create a system user
+                    let adminUser = await db.user.findFirst({
                         orderBy: { createdAt: 'asc' }
                     });
 
                     if (!adminUser) {
-                        throw new Error('No users found in the system. Please create a user first.');
+                        // Create a system user for imports
+                        console.log('No users found. Creating system import user...');
+                        adminUser = await db.user.create({
+                            data: {
+                                email: 'system@qc.local',
+                                name: 'System Import',
+                                role: 'ADMIN',
+                            }
+                        });
                     }
 
                     console.log('Using user for import:', adminUser.email);
