@@ -132,8 +132,10 @@ export function LoginForm({
                 const left = window.screen.width / 2 - width / 2;
                 const top = window.screen.height / 2 - height / 2;
 
-                const skalaUrl = process.env.NEXT_PUBLIC_PERFEX_URL || 'https://skala.narapatistudio.com';
-                const ssoUrl = `${skalaUrl}/admin/qc_integration/qc_sso/login?popup=1`;
+                const skalaUrl = process.env.NEXT_PUBLIC_PERFEX_URL || 'https://careestate.skalapro.cloud';
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+                const returnUrl = encodeURIComponent(`${appUrl}/api/auth/callback/skala`);
+                const ssoUrl = `${skalaUrl}/admin/qc_integration/qc_sso/login?popup=1&return_url=${returnUrl}`;
 
                 window.open(
                   ssoUrl,
