@@ -8,18 +8,21 @@ export async function GET(request: NextRequest) {
     const code = searchParams.get('code');
 
     if (!code) {
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://qc.narapatistudio.com';
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://app.skalapro.cloud';
         return NextResponse.redirect(new URL('/login?error=missing_code', baseUrl));
     }
 
     try {
-        // Validate token with Skala Backend
-        // We use the internal URL if possible, or the public URL
-        // Assuming PERFEX_API_URL is set in .env
-        const perfexUrl = process.env.PERFEX_API_URL || 'http://localhost:8888/skala-new/index.php';
+        // Validate token with Skala Backend.
+        // Priority: tenant_url param (passed by Qc_sso) → PERFEX_API_URL env → fallback
+        // tenant_url tells us which Perfex tenant generated the token so we validate
+        // against the correct database/instance.
+        const tenantUrlParam = searchParams.get('tenant_url');
+        const perfexUrl = tenantUrlParam
+            ? decodeURIComponent(tenantUrlParam).replace(/\/$/, '')
+            : (process.env.PERFEX_API_URL || 'http://127.0.0.1').replace(/\/$/, '');
 
-        // Construct the validation URL. 
-        // Using direct HMVC controller path: module/controller/method
+        // Construct the validation URL.
         const validateUrl = `${perfexUrl}/qc_integration/qc_api/validate_token`;
 
         console.log('[SSO Callback] Received code:', code);
@@ -41,6 +44,46 @@ export async function GET(request: NextRequest) {
         if (data.status && data.user) {
             const perfexUser = data.user;
             console.log('[SSO Callback] Perfex User validated:', perfexUser.email);
+            console.log('[SSO Callback] Role:', perfexUser.role, '| Role name:', perfexUser.role_name);
+
+            // Access Control Gatekeeper
+            // role_name is text from Perfex DB, role is numeric ID (fallback)
+            const isAdmin = perfexUser.admin === '1' || perfexUser.admin === 1;
+            const roleName = (perfexUser.role_name || '').toLowerCase().trim();
+            const roleId = String(perfexUser.role || '');
+
+            let mappedRole = 'PROJECT_MANAGER'; // default
+            let isAllowed = false;
+
+            if (isAdmin || roleName.includes('super admin') || roleId === '8') {
+                mappedRole = 'SUPER_ADMIN';
+                isAllowed = true;
+            } else if (roleName.includes('designer interior') || roleId === '7') {
+                mappedRole = 'DESIGNER_INTERIOR';
+                isAllowed = true;
+            } else if (roleName.includes('project manager') || roleId === '4') {
+                mappedRole = 'PROJECT_MANAGER';
+                isAllowed = true;
+            } else if (roleName.includes('accounting') || roleId === '2') {
+                mappedRole = 'ACCOUNTING';
+                isAllowed = true;
+            } else if (roleName.includes('furniture engineer') || roleId === '6') {
+                // Map furniture engineer as PROJECT_MANAGER (closest match)
+                mappedRole = 'PROJECT_MANAGER';
+                isAllowed = true;
+            } else if (roleName.includes('employee') || roleId === '1') {
+                mappedRole = 'PROJECT_MANAGER';
+                isAllowed = true;
+            } else if (roleName.includes('sales') || roleId === '3') {
+                mappedRole = 'PROJECT_MANAGER';
+                isAllowed = true;
+            }
+
+            if (!isAllowed) {
+                console.error('[SSO Callback] User role not allowed:', roleName, '| role ID:', roleId);
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://app.skalapro.cloud';
+                return NextResponse.redirect(new URL('/login?error=unauthorized_role_skala', baseUrl));
+            }
 
             // === SYNC USER WITH LOCAL DB ===
             let user = await db.user.findUnique({
@@ -49,20 +92,18 @@ export async function GET(request: NextRequest) {
 
             if (user) {
                 // Update existing user
-                if (user.perfexId !== parseInt(perfexUser.staffid)) {
+                if (user.perfexId !== parseInt(perfexUser.staffid) || user.role !== mappedRole) {
                     user = await db.user.update({
                         where: { id: user.id },
                         data: {
                             perfexId: parseInt(perfexUser.staffid),
-                            // Update other fields if needed
-                            name: `${perfexUser.firstname} ${perfexUser.lastname}`,
-                            role: perfexUser.admin === '1' ? 'ADMIN' : 'QC',
+                            name: `${perfexUser.firstname} ${perfexUser.lastname}`.trim() || 'SKALA User',
+                            role: mappedRole as any,
                         }
                     });
                 }
             } else {
                 // Check by perfexId just in case email changed (unlikely but possible)
-                // But only if staffid is valid
                 const parsedStaffId = perfexUser.staffid ? parseInt(perfexUser.staffid) : NaN;
 
                 let existingUserByPerfexId = null;
@@ -77,8 +118,8 @@ export async function GET(request: NextRequest) {
                         where: { id: existingUserByPerfexId.id },
                         data: {
                             email: perfexUser.email,
-                            name: `${perfexUser.firstname} ${perfexUser.lastname}`,
-                            role: perfexUser.admin === '1' ? 'ADMIN' : 'QC',
+                            name: `${perfexUser.firstname} ${perfexUser.lastname}`.trim() || 'SKALA User',
+                            role: mappedRole as any,
                         }
                     });
                 } else {
@@ -89,7 +130,7 @@ export async function GET(request: NextRequest) {
                             name: `${perfexUser.firstname || ''} ${perfexUser.lastname || ''}`.trim() || 'SKALA User',
                             perfexId: !isNaN(parsedStaffId) ? parsedStaffId : undefined,
                             active: perfexUser.active === '1',
-                            role: perfexUser.admin === '1' ? 'ADMIN' : 'QC',
+                            role: mappedRole as any,
                         }
                     });
                 }
@@ -114,6 +155,9 @@ export async function GET(request: NextRequest) {
             const isPopup = searchParams.get('popup') === '1';
 
             if (isPopup) {
+                // Escape session data for safe embedding in HTML/JS
+                const escapedSession = JSON.stringify(sessionData).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+
                 const html = `
                 <!DOCTYPE html>
                 <html>
@@ -148,8 +192,12 @@ export async function GET(request: NextRequest) {
                     <h1>Login Successful!</h1>
                     <p>Closing window...</p>
                     <script>
-                        // Use wildcard targetOrigin to ensure message delivery across variations (www, http/https edge cases)
-                        window.opener.postMessage({ type: 'SKALA_LOGIN_SUCCESS' }, '*');
+                        // Send session data to parent window so it can set its own cookie
+                        const sessionData = ${escapedSession};
+                        window.opener.postMessage({ 
+                            type: 'SKALA_LOGIN_SUCCESS',
+                            sessionData: sessionData
+                        }, '*');
                         setTimeout(() => {
                             window.close();
                         }, 1500);
@@ -187,7 +235,7 @@ export async function GET(request: NextRequest) {
             return redirectResponse;
         } else {
             console.error('[SSO Callback] Token validation failed:', data);
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://qc.narapatistudio.com';
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://app.skalapro.cloud';
             return NextResponse.redirect(new URL('/login?error=invalid_token', baseUrl));
         }
     } catch (error) {
@@ -212,11 +260,11 @@ export async function GET(request: NextRequest) {
                 response: error.response?.data
             });
             const errorDetails = encodeURIComponent(JSON.stringify(error.response?.data || error.message));
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://qc.narapatistudio.com';
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://app.skalapro.cloud';
             return NextResponse.redirect(new URL(`/login?error=validation_error&details=${errorDetails}`, baseUrl));
         }
         const errorMessage = encodeURIComponent(error instanceof Error ? error.message : String(error));
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://qc.narapatistudio.com';
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://app.skalapro.cloud';
         return NextResponse.redirect(new URL(`/login?error=validation_error&details=${errorMessage}`, baseUrl));
     }
 }
