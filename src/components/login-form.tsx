@@ -133,8 +133,13 @@ export function LoginForm({
                 const top = window.screen.height / 2 - height / 2;
 
                 const skalaUrl = process.env.NEXT_PUBLIC_PERFEX_URL || 'https://careestate.skalapro.cloud';
-                const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
-                const returnUrl = encodeURIComponent(`${appUrl}/api/auth/callback/skala`);
+                // Build callback URL from current window location so it works
+                // regardless of sub-path (e.g. /admin/app/ prefix on Perfex proxy)
+                const currentOrigin = window.location.origin;
+                const currentPath = window.location.pathname; // e.g. /admin/app/login
+                // Strip everything after the base app path to get the root
+                const basePath = currentPath.replace(/\/login.*$/, '').replace(/\/$/, '');
+                const returnUrl = encodeURIComponent(`${currentOrigin}${basePath}/api/auth/callback/skala`);
                 const ssoUrl = `${skalaUrl}/admin/qc_integration/qc_sso/login?popup=1&return_url=${returnUrl}`;
 
                 window.open(
