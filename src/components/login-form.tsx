@@ -133,13 +133,10 @@ export function LoginForm({
                 const top = window.screen.height / 2 - height / 2;
 
                 const skalaUrl = process.env.NEXT_PUBLIC_PERFEX_URL || 'https://careestate.skalapro.cloud';
-                // Build callback URL from current window location so it works
-                // regardless of sub-path (e.g. /admin/app/ prefix on Perfex proxy)
-                const currentOrigin = window.location.origin;
-                const currentPath = window.location.pathname; // e.g. /admin/app/login
-                // Strip everything after the base app path to get the root
-                const basePath = currentPath.replace(/\/login.*$/, '').replace(/\/$/, '');
-                const returnUrl = encodeURIComponent(`${currentOrigin}${basePath}/api/auth/callback/skala`);
+                // NEXT_PUBLIC_APP_URL must be set to the public-facing Next.js domain
+                // e.g. https://app.skalapro.cloud — NOT the Perfex proxy sub-path
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.skalapro.cloud';
+                const returnUrl = encodeURIComponent(`${appUrl}/api/auth/callback/skala`);
                 const ssoUrl = `${skalaUrl}/admin/qc_integration/qc_sso/login?popup=1&return_url=${returnUrl}`;
 
                 window.open(
